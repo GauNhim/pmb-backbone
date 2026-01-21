@@ -14,21 +14,30 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- CSS TÙY CHỈNH ---
+# --- CSS TÙY CHỈNH (Mô phỏng giao diện Tailwind) ---
 st.markdown("""
 <style>
-    .main-header {font-size: 24px; font-weight: bold; color: #1E3A8A;}
-    .sub-header {font-size: 18px; font-weight: bold; color: #374151;}
-    .card {background-color: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); margin-bottom: 10px;}
-    .metric-value {font-size: 28px; font-weight: bold;}
-    .metric-label {font-size: 14px; color: #6B7280;}
+    .main-header {font-size: 26px; font-weight: bold; color: #1E40AF; margin-bottom: 20px;}
+    .sub-header {font-size: 18px; font-weight: 600; color: #374151; margin-top: 10px;}
+    .card-metric {
+        background-color: #F3F4F6;
+        border-radius: 10px;
+        padding: 15px;
+        border-left: 5px solid #3B82F6;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    .stButton>button {
+        border-radius: 8px;
+        height: 3em;
+        font-weight: 500;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-# --- KHỞI TẠO DỮ LIỆU GIẢ LẬP (MOCK DATA) ---
-# Chuyển đổi từ constants.ts
+# --- KHỞI TẠO DỮ LIỆU (MOCK DATA TỪ constants.ts) ---
 def init_data():
     if 'stations' not in st.session_state:
+        # Dữ liệu giả lập ban đầu
         st.session_state['stations'] = [
             {
                 "id": "1", "code": "QNHW002", "name": "Móng Cái", "region": "Miền Bắc", "status": "PLANNED",
@@ -38,14 +47,18 @@ def init_data():
                 "coordinates": {"lat": 21.521187, "lng": 107.961813},
                 "designData": {
                     "racks": [{"id": "r1", "name": "Rack 1 (Nguồn)", "totalU": 42}],
-                    "equipments": [],
+                    "equipments": [
+                        {"id": "eq1", "rackId": "r1", "name": "Nguồn Emerson 701", "model": "Netsure 701", "type": "DC", "powerW": 200, "startU": 1, "uHeight": 5, "color": "#3B82F6"}
+                    ],
                     "calcItems": [],
                     "costEstimateItems": [], # Dữ liệu dự toán
                     "roomParams": {"width": 3, "length": 5, "height": 3, "tempInside": 25, "tempOutside": 40, "equipmentHeatW": 0},
                     "batteryParams": {"dcLoadW": 0, "targetBackupTime": 8, "batteryVoltage": 48, "batteryAh": 100, "efficiency": 0.9},
                     "rectParams": {"dcLoadW": 0, "batteryAh": 0, "rectifierModuleSize": 3000}
                 },
-                "inventory": []
+                "inventory": [
+                    {"id": "inv1", "itemCode": "MPD-100", "itemName": "Máy phát điện Cummins 100kVA", "quantity": 1, "ratedPower": 40, "type": "OFFLINE", "unit": "Cái", "location1": "Sân trạm", "transfer": {"isTransferred": False}}
+                ]
             },
             {
                 "id": "2", "code": "NBHW001", "name": "Nam Định", "region": "Miền Bắc", "status": "ACTIVE",
@@ -55,406 +68,371 @@ def init_data():
                 "coordinates": {"lat": 20.42027, "lng": 106.16459},
                 "designData": {}, "inventory": []
             },
-            {
+            # ... Thêm các trạm khác tương tự file constants.ts
+             {
                 "id": "3", "code": "QNIW001", "name": "Ngọc Hồi", "region": "Miền Trung", "status": "ACTIVE",
                 "province": "Quảng Ngãi", "buildYear": "2014", "power": 12, "racks": 5,
-                "manager": "Nguyễn Duy Khánh", "branchManager": "Đinh Văn Thắng",
                 "buildingType": "Cont", "category": "Repeater",
                 "coordinates": {"lat": 14.704680, "lng": 107.685551},
                 "designData": {}, "inventory": []
-            },
-             # ... (Bạn có thể thêm các trạm khác từ file constants.ts vào đây)
+            }
         ]
     
-    if 'messages' not in st.session_state:
-        st.session_state['messages'] = [{"role": "model", "parts": ["Xin chào! Tôi là trợ lý ảo PMB. Tôi có thể giúp gì cho bạn?"]}]
+    if 'chat_history' not in st.session_state:
+        st.session_state['chat_history'] = [{"role": "model", "parts": ["Xin chào! Tôi là trợ lý ảo PMB. Tôi có thể giúp gì cho bạn về dữ liệu hạ tầng?"]}]
 
 init_data()
 
-# --- CÁC HÀM TIỆN ÍCH ---
-
+# --- HÀM TIỆN ÍCH ---
 def get_station_by_id(station_id):
+    return next((s for s in st.session_state['stations'] if s['id'] == station_id), None)
+
+def update_station_data(station_id, key, value):
     for s in st.session_state['stations']:
         if s['id'] == station_id:
-            return s
-    return None
+            s[key] = value
+            break
 
-def update_station(updated_station):
-    for i, s in enumerate(st.session_state['stations']):
-        if s['id'] == updated_station['id']:
-            st.session_state['stations'][i] = updated_station
-            return
-
-# --- VIEW: DASHBOARD ---
+# --- 1. DASHBOARD ---
 def render_dashboard():
-    st.markdown('<div class="main-header">Tổng quan hệ thống</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-header">Tổng quan hệ thống PMB</div>', unsafe_allow_html=True)
     stations = st.session_state['stations']
-    
-    # Tính toán thống kê
+    df = pd.DataFrame(stations)
+
+    # Metrics
     total = len(stations)
-    active = len([s for s in stations if s['status'] == 'ACTIVE'])
-    planned = len([s for s in stations if s['status'] == 'PLANNED'])
-    offline = len([s for s in stations if s['status'] == 'OFFLINE'])
-    maintenance = len([s for s in stations if s['status'] == 'MAINTENANCE'])
+    active = len(df[df['status'] == 'ACTIVE'])
+    planned = len(df[df['status'] == 'PLANNED'])
+    offline = len(df[df['status'] == 'OFFLINE'])
     total_power = sum([float(s.get('power', 0)) for s in stations])
 
-    # Hiển thị Metrics
-    col1, col2, col3, col4, col5 = st.columns(5)
-    with col1:
-        st.metric("Tổng số trạm", total, delta="Trạm")
-    with col2:
-        st.metric("Đang hoạt động", active, delta=f"{round(active/total*100)}%", delta_color="normal")
-    with col3:
-        st.metric("Đang triển khai", planned, delta="Dự án mới")
-    with col4:
-        st.metric("Sự cố / Mất tín hiệu", offline, delta_color="inverse")
-    with col5:
-        st.metric("Tổng công suất", f"{total_power} kW")
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Tổng số trạm", total, "Trạm")
+    c2.metric("Đang hoạt động", active, f"{round(active/total*100 if total else 0)}%")
+    c3.metric("Đang triển khai", planned, "Dự án mới")
+    c4.metric("Tổng công suất", f"{total_power} kW")
 
-    # Biểu đồ
+    # Charts
     col_chart1, col_chart2 = st.columns(2)
-    
     with col_chart1:
         st.subheader("Phân bố theo Khu vực")
-        region_counts = pd.DataFrame(stations)['region'].value_counts().reset_index()
-        region_counts.columns = ['Khu vực', 'Số lượng']
-        fig_region = px.pie(region_counts, values='Số lượng', names='Khu vực', hole=0.4, color_discrete_sequence=px.colors.qualitative.Set2)
-        st.plotly_chart(fig_region, use_container_width=True)
-
+        if not df.empty:
+            fig = px.pie(df, names='region', title='Tỷ lệ trạm theo vùng', hole=0.4, color_discrete_sequence=px.colors.qualitative.Prism)
+            st.plotly_chart(fig, use_container_width=True)
+    
     with col_chart2:
-        st.subheader("Công suất theo trạm")
-        df_power = pd.DataFrame(stations).sort_values(by='power', ascending=False).head(10)
-        fig_power = px.bar(df_power, x='name', y='power', color='status', title="Top 10 Trạm tiêu thụ điện năng",
-                           labels={'power': 'Công suất (kW)', 'name': 'Tên trạm', 'status': 'Trạng thái'})
-        st.plotly_chart(fig_power, use_container_width=True)
+        st.subheader("Trạng thái trạm")
+        if not df.empty:
+            fig2 = px.bar(df['status'].value_counts().reset_index(), x='status', y='count', 
+                          title="Số lượng trạm theo trạng thái", labels={'count': 'Số lượng', 'status': 'Trạng thái'},
+                          color='status')
+            st.plotly_chart(fig2, use_container_width=True)
 
-# --- VIEW: DANH SÁCH TRẠM ---
+# --- 2. DANH SÁCH TRẠM ---
 def render_station_list():
     st.markdown('<div class="main-header">Danh sách trạm tuyến trục</div>', unsafe_allow_html=True)
-    
-    # Filter
-    col1, col2, col3 = st.columns([2, 1, 1])
-    with col1:
-        search_term = st.text_input("Tìm kiếm", placeholder="Nhập tên, mã trạm...")
-    with col2:
-        region_filter = st.selectbox("Khu vực", ["Tất cả", "Miền Bắc", "Miền Trung", "Miền Nam"])
-    with col3:
-        status_filter = st.selectbox("Trạng thái", ["Tất cả", "ACTIVE", "PLANNED", "MAINTENANCE", "OFFLINE"])
-
-    # Xử lý lọc dữ liệu
     df = pd.DataFrame(st.session_state['stations'])
     
-    if search_term:
-        df = df[df['name'].str.contains(search_term, case=False) | df['code'].str.contains(search_term, case=False)]
-    if region_filter != "Tất cả":
-        df = df[df['region'] == region_filter]
-    if status_filter != "Tất cả":
-        df = df[df['status'] == status_filter]
-
-    # Hiển thị bảng (Chỉ chọn các cột quan trọng)
-    display_cols = ['code', 'name', 'province', 'region', 'status', 'power', 'buildingType', 'manager']
+    # Filter
+    c1, c2, c3 = st.columns([2, 1, 1])
+    search = c1.text_input("Tìm kiếm (Tên, Mã trạm, Tỉnh)", placeholder="Nhập từ khóa...")
+    region_filter = c2.selectbox("Khu vực", ["Tất cả"] + list(df['region'].unique()) if not df.empty else [])
     
-    st.dataframe(
-        df[display_cols],
-        column_config={
-            "code": "Mã trạm",
-            "name": "Tên trạm",
-            "province": "Tỉnh/TP",
-            "region": "Khu vực",
-            "status": st.column_config.SelectboxColumn("Trạng thái", options=["ACTIVE", "PLANNED", "OFFLINE"], required=True),
-            "power": st.column_config.NumberColumn("Công suất (kW)", format="%d kW"),
-            "buildingType": "Loại nhà",
-            "manager": "Nhân sự PMB"
-        },
-        use_container_width=True,
-        hide_index=True
-    )
+    # Apply Filter
+    if not df.empty:
+        if search:
+            df = df[df['name'].str.contains(search, case=False) | df['code'].str.contains(search, case=False) | df['province'].str.contains(search, case=False)]
+        if region_filter != "Tất cả":
+            df = df[df['region'] == region_filter]
 
-    # Nút thêm mới (Mockup)
-    if st.button("➕ Thêm trạm mới"):
-        st.info("Chức năng thêm trạm đang được phát triển.")
+        st.dataframe(
+            df[['code', 'name', 'province', 'region', 'status', 'power', 'buildingType', 'manager']],
+            column_config={
+                "code": "Mã trạm", "name": "Tên trạm", "province": "Tỉnh/TP",
+                "region": "Khu vực", "status": "Trạng thái", "power": st.column_config.NumberColumn("Công suất (kW)"),
+                "buildingType": "Loại nhà", "manager": "Nhân sự PMB"
+            },
+            use_container_width=True,
+            hide_index=True
+        )
+    else:
+        st.info("Chưa có dữ liệu trạm.")
 
-# --- VIEW: TRỢ LÝ AI ---
-def render_ai_assistant():
-    st.markdown('<div class="main-header">Trợ lý ảo AI (Gemini)</div>', unsafe_allow_html=True)
-    
-    # Sidebar config API Key
-    api_key = os.getenv("API_KEY") 
-    if not api_key:
-        api_key = st.sidebar.text_input("Nhập Google API Key", type="password")
-    
-    if not api_key:
-        st.warning("Vui lòng nhập API Key để sử dụng AI.")
-        return
-
-    # Khởi tạo Chat
-    genai.configure(api_key=api_key)
-    
-    # Chuẩn bị dữ liệu context cho AI
-    stations_json = json.dumps(st.session_state['stations'], ensure_ascii=False)
-    system_instruction = f"""
-    Bạn là trợ lý ảo quản lý trạm viễn thông PMB. Dưới đây là dữ liệu các trạm:
-    {stations_json}
-    Hãy trả lời câu hỏi dựa trên dữ liệu này. Trả lời ngắn gọn, chuyên nghiệp.
-    """
-    
-    model = genai.GenerativeModel('gemini-1.5-flash', system_instruction=system_instruction)
-
-    # Hiển thị lịch sử chat
-    for msg in st.session_state['messages']:
-        with st.chat_message(msg['role']):
-            st.markdown(msg['parts'][0])
-
-    # Input chat
-    if prompt := st.chat_input("Hỏi gì đó về các trạm..."):
-        # User message
-        st.chat_message("user").markdown(prompt)
-        st.session_state['messages'].append({"role": "user", "parts": [prompt]})
-        
-        # AI Response
-        try:
-            response = model.generate_content(prompt)
-            st.chat_message("model").markdown(response.text)
-            st.session_state['messages'].append({"role": "model", "parts": [response.text]})
-        except Exception as e:
-            st.error(f"Lỗi kết nối AI: {e}")
-
-# --- VIEW: TÍNH TOÁN THIẾT KẾ ---
+# --- 3. TÍNH TOÁN THIẾT KẾ (FEATURE CHÍNH) ---
 def render_design_calculations():
     st.markdown('<div class="main-header">Tính toán thiết kế & Dự toán</div>', unsafe_allow_html=True)
 
-    # 1. Chọn trạm để thiết kế
-    station_names = {s['id']: f"{s['code']} - {s['name']}" for s in st.session_state['stations']}
-    selected_id = st.selectbox("Chọn trạm làm việc:", options=list(station_names.keys()), format_func=lambda x: station_names[x])
+    # Chọn trạm
+    stations = st.session_state['stations']
+    station_options = {s['id']: f"{s['code']} - {s['name']}" for s in stations}
+    selected_id = st.selectbox("Chọn trạm làm việc:", options=list(station_options.keys()), format_func=lambda x: station_options[x])
     
     station = get_station_by_id(selected_id)
-    if not station:
-        st.error("Không tìm thấy trạm")
-        return
+    if not station: return
 
-    # Đảm bảo designData tồn tại
+    # Init data if missing
     if 'designData' not in station:
-        station['designData'] = {
-            "calcItems": [], 
-            "costEstimateItems": [],
-            "batteryParams": {"dcLoadW": 0, "targetBackupTime": 8, "batteryVoltage": 48, "batteryAh": 100, "efficiency": 0.9}
-        }
+        station['designData'] = {}
     
     design_data = station['designData']
+    
+    # Tabs
+    tab_layout, tab_power, tab_battery, tab_cost = st.tabs(["🏗️ Bố trí Rack", "⚡ Tính Công suất", "🔋 Tính Ắc quy", "💰 Dự toán"])
 
-    # TABS
-    tab1, tab2, tab3, tab4 = st.tabs(["⚡ Công suất", "🔋 Ắc quy", "💰 Dự toán", "❄️ Điều hòa"])
+    # --- TAB: BỐ TRÍ RACK (Simplified) ---
+    with tab_layout:
+        st.info("Chức năng bố trí Rack trực quan (Drag & Drop) được hỗ trợ tốt nhất trên phiên bản React. Dưới đây là danh sách thiết bị hiện tại.")
+        equipments = design_data.get('equipments', [])
+        if equipments:
+            st.dataframe(pd.DataFrame(equipments)[['name', 'model', 'type', 'powerW', 'rackId', 'startU']])
+        else:
+            st.warning("Chưa có thiết bị trong Rack.")
 
-    # --- TAB 1: CÔNG SUẤT ---
-    with tab1:
+    # --- TAB: TÍNH CÔNG SUẤT ---
+    with tab_power:
         st.subheader("Bảng tính toán công suất trạm")
         
-        # Tạo DataFrame từ calcItems
         calc_items = design_data.get('calcItems', [])
         
-        # Editor cho bảng công suất
+        # Tạo cấu trúc DataFrame mặc định
+        df_schema = {
+            "name": "Thiết bị A", "model": "", "quantity": 1, 
+            "powerRatedW": 0.0, "voltage": 48.0, "current": 0.0,
+            "wireSection": "", "wireType": "1 pha 2 dây: 2x... mm2", "note": "", "type": "DC"
+        }
+        
         if not calc_items:
-            # Dữ liệu mẫu nếu trống
-            df_calc = pd.DataFrame([{
-                "id": str(datetime.now().timestamp()),
-                "name": "Thiết bị mẫu", "model": "", "quantity": 1, 
-                "powerRatedW": 100, "voltage": 48, "current": 2.08,
-                "wireSection": "2x4", "wireType": "1 pha 2 dây", "type": "DC", "note": ""
-            }])
+            df_calc = pd.DataFrame([df_schema])
         else:
             df_calc = pd.DataFrame(calc_items)
 
-        # Cấu hình cột hiển thị
-        edited_df = st.data_editor(
+        # Editor
+        edited_power_df = st.data_editor(
             df_calc,
             num_rows="dynamic",
             column_config={
-                "name": "Tên thiết bị",
-                "model": "Model",
-                "quantity": st.column_config.NumberColumn("Số lượng", min_value=0, step=1),
+                "name": st.column_config.TextColumn("Tên thiết bị", width="medium"),
+                "quantity": st.column_config.NumberColumn("SL", min_value=0, step=1),
                 "powerRatedW": st.column_config.NumberColumn("P danh định (W)", min_value=0),
                 "voltage": st.column_config.NumberColumn("U (V)", min_value=0),
-                "current": st.column_config.NumberColumn("I (A)", disabled=True), # Tính toán tự động
-                "wireSection": "Tiết diện (mm2)",
-                "wireType": st.column_config.SelectboxColumn(
-                    "Loại dây",
-                    options=[
-                        "1 pha 2 dây: 2x... mm2 - Cu/PVC",
-                        "1 pha 1 dây 1 x ... mm2 - Cu/PVC",
-                        "3 pha 3 dây: 3x ... mm2- Cu/PVC/PVC",
-                        "3 pha 4 dây 3x... + 1x... mm2 -Cu/PVC/PVC"
-                    ]
-                ),
+                "current": st.column_config.NumberColumn("I (A)", disabled=True), # Auto calc
+                "wireSection": "Tiết diện dây (mm2)",
+                "wireType": st.column_config.SelectboxColumn("Loại dây", options=[
+                    "1 pha 2 dây: 2x... mm2 - Cu/PVC",
+                    "1 pha 1 dây 1 x ... mm2 - Cu/PVC",
+                    "3 pha 3 dây: 3x ... mm2- Cu/PVC/PVC",
+                    "3 pha 4 dây 3x... + 1x... mm2 -Cu/PVC/PVC"
+                ], width="large"),
                 "type": st.column_config.SelectboxColumn("Loại", options=["DC", "AC", "PASSIVE"]),
                 "note": "Ghi chú"
             },
-            key=f"editor_power_{selected_id}"
+            key=f"power_editor_{selected_id}"
         )
 
-        # Logic tính toán lại dòng I và Tổng
-        if not edited_df.empty:
-            # Tự động tính I = P / U nếu U > 0
-            edited_df['current'] = edited_df.apply(lambda x: round(x['powerRatedW'] / x['voltage'], 2) if x['voltage'] > 0 else 0, axis=1)
-            edited_df['total_power'] = edited_df['quantity'] * edited_df['powerRatedW']
+        # Logic tính toán tự động & Lưu
+        if not edited_power_df.empty:
+            # Calculate Current I = P / U
+            edited_power_df['current'] = edited_power_df.apply(
+                lambda x: round(x['powerRatedW'] / x['voltage'], 2) if x['voltage'] > 0 else 0, axis=1
+            )
             
-            # Lưu lại vào session state
-            design_data['calcItems'] = edited_df.to_dict('records')
+            # Tính tổng
+            total_load = (edited_power_df['quantity'] * edited_power_df['powerRatedW']).sum()
             
-            # Hiển thị tổng
-            total_load = edited_df['total_power'].sum()
-            st.info(f"👉 TỔNG CÔNG SUẤT TRẠM: **{total_load:,.0f} W**")
-
-            # Nút lưu
+            st.success(f"⚡ TỔNG CÔNG SUẤT TRẠM: **{total_load:,.0f} W**")
+            
             if st.button("Lưu bảng công suất"):
-                update_station(station)
-                st.success("Đã lưu dữ liệu!")
+                design_data['calcItems'] = edited_power_df.to_dict('records')
+                st.toast("Đã lưu dữ liệu công suất!")
 
-    # --- TAB 2: ẮC QUY ---
-    with tab2:
-        st.subheader("Tính toán dung lượng Ắc quy")
-        col_batt1, col_batt2 = st.columns(2)
+    # --- TAB: TÍNH ẮC QUY ---
+    with tab_battery:
+        st.subheader("Tính toán thời gian dự phòng Ắc quy")
+        batt_params = design_data.get('batteryParams', {"dcLoadW": 0, "targetBackupTime": 4, "batteryAh": 100})
         
-        params = design_data.get('batteryParams', {})
-        
-        with col_batt1:
-            dc_load = st.number_input("Công suất tải DC (W)", value=float(params.get('dcLoadW', 0)))
-            backup_time = st.number_input("Thời gian backup (Giờ)", value=float(params.get('targetBackupTime', 8)))
-            batt_voltage = st.number_input("Điện áp (V)", value=float(params.get('batteryVoltage', 48)))
-        
-        with col_batt2:
+        c1, c2 = st.columns(2)
+        with c1:
+            dc_load = st.number_input("Tải DC (W)", value=float(batt_params.get('dcLoadW', 0)))
+            backup_time = st.number_input("Thời gian backup mong muốn (h)", value=float(batt_params.get('targetBackupTime', 4)))
+        with c2:
             batt_ah = st.selectbox("Dung lượng 1 tổ (Ah)", [50, 100, 150, 200], index=1)
-            efficiency = st.number_input("Hệ số xả sâu", value=float(params.get('efficiency', 0.9)), max_value=1.0)
+            voltage = st.number_input("Điện áp hệ thống (V)", value=48, disabled=True)
+            eff = 0.9 # Hiệu suất
 
-        # Tính toán
-        if batt_voltage * efficiency > 0:
-            total_ah_req = (dc_load * backup_time) / (batt_voltage * efficiency)
-            num_strings = total_ah_req / batt_ah
-            rec_strings = int(num_strings) + 1 if num_strings % 1 > 0 else int(num_strings)
-        else:
-            total_ah_req, num_strings, rec_strings = 0, 0, 0
+        if st.button("Tính toán & Lưu cấu hình Ắc quy"):
+            # Công thức: Ah = (P * t) / (V * eff)
+            ah_req = (dc_load * backup_time) / (voltage * eff)
+            n_strings = ah_req / batt_ah
+            
+            design_data['batteryParams'] = {"dcLoadW": dc_load, "targetBackupTime": backup_time, "batteryAh": batt_ah}
+            
+            st.info(f"""
+            **Kết quả tính toán:**
+            - Dung lượng yêu cầu: `{ah_req:.2f} Ah`
+            - Số tổ ắc quy ({batt_ah}Ah) cần thiết: `{n_strings:.2f}` tổ
+            - **Khuyến nghị:** Trang bị **{int(n_strings) + 1}** tổ.
+            """)
 
-        st.divider()
-        st.write(f"Dung lượng yêu cầu: **{total_ah_req:.2f} Ah**")
-        st.write(f"Số tổ cần thiết (lý thuyết): **{num_strings:.2f}**")
-        st.success(f"📌 KHUYẾN NGHỊ: Trang bị **{rec_strings}** tổ ắc quy **{batt_ah}Ah**")
-
-        # Lưu params
-        if st.button("Lưu tính toán Ắc quy"):
-            design_data['batteryParams'] = {
-                "dcLoadW": dc_load, "targetBackupTime": backup_time,
-                "batteryVoltage": batt_voltage, "batteryAh": batt_ah, "efficiency": efficiency
-            }
-            update_station(station)
-            st.success("Đã lưu!")
-
-    # --- TAB 3: DỰ TOÁN (Yêu cầu mới) ---
-    with tab3:
-        st.subheader("Dự toán thiết bị & vật tư")
+    # --- TAB: DỰ TOÁN (Yêu cầu mới) ---
+    with tab_cost:
+        st.subheader("Dự toán thiết bị & Vật tư")
         
-        cost_items = design_data.get('costEstimateItems', [])
-        if not cost_items:
-             df_cost = pd.DataFrame(columns=['category', 'itemCode', 'itemName', 'unit', 'quantity', 'unitPrice', 'condition', 'note'])
-        else:
-             df_cost = pd.DataFrame(cost_items)
+        # 1. Sync Logic (Đồng bộ từ Layout/Power sang Dự toán)
+        if st.button("🔄 Đồng bộ từ Bảng Công suất / Rack"):
+            existing_cost = design_data.get('costEstimateItems', [])
+            
+            # Giả lập lấy từ Calc Items để đưa vào dự toán
+            calc_items = design_data.get('calcItems', [])
+            new_items = []
+            for item in calc_items:
+                # Kiểm tra trùng lặp đơn giản
+                if not any(c['itemName'] == item['name'] for c in existing_cost):
+                    new_items.append({
+                        "category": "MAIN", # Vật tư chính
+                        "itemCode": "",
+                        "itemName": item['name'],
+                        "unit": "Cái",
+                        "quantity": item['quantity'],
+                        "unitPrice": 0,
+                        "condition": "Mới",
+                        "note": "Đồng bộ từ bảng CS"
+                    })
+            
+            design_data['costEstimateItems'] = existing_cost + new_items
+            st.success(f"Đã đồng bộ thêm {len(new_items)} mục vào dự toán.")
 
-        # Phân loại hiển thị (Để đơn giản trong Streamlit, ta dùng 1 bảng chung nhưng có cột Category)
-        st.info("💡 Category: MAIN = Vật tư chính (từ Rack), AUX = Vật tư phụ (Nhập tay)")
+        # 2. Table Editor
+        cost_items = design_data.get('costEstimateItems', [])
+        cost_schema = {
+            "category": "AUX", "itemCode": "", "itemName": "", "unit": "Cái",
+            "quantity": 1, "unitPrice": 0, "condition": "Mới", "note": ""
+        }
+        
+        if not cost_items:
+            df_cost = pd.DataFrame([cost_schema])
+        else:
+            df_cost = pd.DataFrame(cost_items)
+
+        st.caption("Phân loại: MAIN (Vật tư chính), AUX (Vật tư phụ). Nhập giá để tính thành tiền.")
         
         edited_cost_df = st.data_editor(
             df_cost,
             num_rows="dynamic",
             column_config={
                 "category": st.column_config.SelectboxColumn("Phân loại", options=["MAIN", "AUX"], required=True),
-                "itemCode": "Mã vật tư",
-                "itemName": "Tên vật tư",
-                "unit": "Đơn vị",
-                "quantity": st.column_config.NumberColumn("Số lượng", min_value=1),
+                "itemCode": "Mã VT",
+                "itemName": st.column_config.TextColumn("Tên vật tư", width="large"),
+                "unit": st.column_config.TextColumn("Đơn vị", width="small"),
+                "quantity": st.column_config.NumberColumn("SL", min_value=1),
                 "unitPrice": st.column_config.NumberColumn("Đơn giá (VNĐ)", format="%d đ"),
                 "condition": st.column_config.SelectboxColumn("Tình trạng", options=["Mới", "Sử dụng lại"]),
                 "note": "Ghi chú"
             },
-            key=f"editor_cost_{selected_id}"
+            key=f"cost_editor_{selected_id}"
         )
 
         if not edited_cost_df.empty:
             # Tính thành tiền
-            edited_cost_df['total'] = edited_cost_df['quantity'] * edited_cost_df['unitPrice']
-            grand_total = edited_cost_df['total'].sum()
+            edited_cost_df['totalAmount'] = edited_cost_df['quantity'] * edited_cost_df['unitPrice']
+            grand_total = edited_cost_df['totalAmount'].sum()
             
-            # Hiển thị tổng
-            st.markdown(f"### 💰 TỔNG CỘNG DỰ TOÁN: :red[{grand_total:,.0f} VNĐ]")
+            st.markdown(f"### 💰 TỔNG GIÁ TRỊ DỰ TOÁN: :red[{grand_total:,.0f} VNĐ]")
 
             col_btn1, col_btn2 = st.columns(2)
+            
             with col_btn1:
-                if st.button("Lưu Dự toán"):
-                    # Lưu lại dữ liệu, loại bỏ cột 'total' vì nó là calculated field
-                    save_df = edited_cost_df.drop(columns=['total'], errors='ignore')
+                if st.button("Lưu bảng Dự toán"):
+                    # Lưu lại, bỏ cột thành tiền (vì là tính toán)
+                    save_df = edited_cost_df.drop(columns=['totalAmount'], errors='ignore')
                     design_data['costEstimateItems'] = save_df.to_dict('records')
-                    update_station(station)
-                    st.success("Đã lưu bảng dự toán!")
+                    st.toast("Đã lưu dự toán!")
             
             with col_btn2:
-                if st.button("Đồng bộ sang danh sách Vật tư"):
-                    # Logic đồng bộ
-                    current_inv = station.get('inventory', [])
+                if st.button("➡️ Đồng bộ sang 'Vật tư thiết bị'"):
+                    # Logic chuyển sang Inventory tab
+                    current_inventory = station.get('inventory', [])
+                    count_added = 0
                     for _, row in edited_cost_df.iterrows():
-                        new_item = {
-                            "id": str(datetime.now().timestamp()) + row['itemCode'],
+                        # Tạo Inventory Item từ Cost Item
+                        new_inv = {
+                            "id": f"sync_{datetime.now().timestamp()}_{row['itemName']}",
                             "itemCode": row['itemCode'],
                             "itemName": row['itemName'],
                             "quantity": row['quantity'],
                             "unit": row['unit'],
                             "type": "OFFLINE",
                             "status": "PLANNED",
-                            "note": f"Đồng bộ từ dự toán. {row['note']}"
+                            "note": f"Đồng bộ từ Dự toán. {row['note']}",
+                            "transfer": {"isTransferred": False}
                         }
-                        current_inv.append(new_item)
+                        current_inventory.append(new_inv)
+                        count_added += 1
                     
-                    station['inventory'] = current_inv
-                    update_station(station)
-                    st.success(f"Đã đồng bộ {len(edited_cost_df)} mục sang Inventory!")
+                    station['inventory'] = current_inventory
+                    st.success(f"Đã chuyển {count_added} thiết bị sang danh sách Quản lý vật tư!")
 
-    # --- TAB 4: ĐIỀU HÒA ---
-    with tab4:
-        st.write("Chức năng tính toán nhiệt đang phát triển...")
+# --- 4. TRỢ LÝ AI (GEMINI) ---
+def render_ai_assistant():
+    st.markdown('<div class="main-header">Trợ lý ảo AI (Gemini)</div>', unsafe_allow_html=True)
+    
+    api_key = os.getenv("API_KEY")
+    if not api_key:
+        api_key = st.text_input("Nhập Google API Key để kích hoạt AI:", type="password")
+    
+    if api_key:
+        genai.configure(api_key=api_key)
+        
+        # Display chat history
+        for msg in st.session_state['chat_history']:
+            with st.chat_message(msg['role']):
+                st.markdown(msg['parts'][0])
+        
+        if prompt := st.chat_input("Hỏi về trạm, quy chuẩn, hoặc phân tích dữ liệu..."):
+            st.chat_message("user").markdown(prompt)
+            st.session_state['chat_history'].append({"role": "user", "parts": [prompt]})
+            
+            # Prepare context
+            stations_json = json.dumps(st.session_state['stations'], default=lambda o: '<not serializable>')
+            context = f"Bạn là trợ lý PMB. Dữ liệu các trạm hiện tại: {stations_json}. Hãy trả lời ngắn gọn."
+            
+            try:
+                model = genai.GenerativeModel('gemini-1.5-flash')
+                response = model.generate_content([context, prompt])
+                st.chat_message("model").markdown(response.text)
+                st.session_state['chat_history'].append({"role": "model", "parts": [response.text]})
+            except Exception as e:
+                st.error(f"Lỗi AI: {e}")
 
-# --- VIEW: VẬT TƯ THIẾT BỊ ---
+# --- 5. VẬT TƯ THIẾT BỊ ---
 def render_inventory():
     st.markdown('<div class="main-header">Quản lý Vật tư thiết bị</div>', unsafe_allow_html=True)
     
-    station_names = {s['id']: f"{s['code']} - {s['name']}" for s in st.session_state['stations']}
-    selected_id = st.selectbox("Chọn trạm xem vật tư:", options=list(station_names.keys()), format_func=lambda x: station_names[x], key="inv_select")
+    stations = st.session_state['stations']
+    station_names = {s['id']: s['name'] for s in stations}
+    s_id = st.selectbox("Chọn trạm:", list(station_names.keys()), format_func=lambda x: station_names[x], key="inv_select")
     
-    station = get_station_by_id(selected_id)
+    station = get_station_by_id(s_id)
     inventory = station.get('inventory', [])
     
     if inventory:
-        df_inv = pd.DataFrame(inventory)
-        st.dataframe(df_inv, use_container_width=True)
+        st.dataframe(pd.DataFrame(inventory))
     else:
-        st.warning("Trạm này chưa có dữ liệu vật tư.")
+        st.info("Trạm này chưa có dữ liệu vật tư.")
 
-# --- SIDEBAR NAVIGATION ---
+# --- NAVIGATION ---
 with st.sidebar:
-    st.header("PMB Manager")
-    menu = st.radio(
-        "Menu",
-        ["Tổng quan", "Danh sách trạm", "Hồ sơ triển khai", "Vật tư thiết bị", "Tính toán thiết kế", "Trợ lý AI"]
-    )
-    
+    st.title("PMB Manager")
+    menu = st.radio("Menu", ["Tổng quan", "Danh sách trạm", "Vật tư thiết bị", "Tính toán thiết kế", "Trợ lý AI"])
     st.divider()
-    st.caption("PMB Core v2.4.0 (Python Edition)")
+    st.caption("Phiên bản Python v1.0")
 
-# --- ROUTING ---
 if menu == "Tổng quan":
     render_dashboard()
 elif menu == "Danh sách trạm":
     render_station_list()
-elif menu == "Trợ lý AI":
-    render_ai_assistant()
 elif menu == "Tính toán thiết kế":
     render_design_calculations()
 elif menu == "Vật tư thiết bị":
     render_inventory()
-else:
-    st.info(f"Chức năng **{menu}** đang được chuyển đổi sang Python.")
+elif menu == "Trợ lý AI":
+    render_ai_assistant()
